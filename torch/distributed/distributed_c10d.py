@@ -2209,11 +2209,15 @@ def _object_to_tensor(obj, device):
     # Otherwise, it will casue 100X slowdown.
     # See: https://github.com/pytorch/pytorch/issues/65696
     byte_tensor = torch.ByteTensor(byte_storage).to(device)
+    if get_debug_level() == DebugLevel.DETAIL and is_nccl_available():
+        logger.warning(f"_object_to_tensor hash value: {torch._C._distributed_c10d._hash_tensors([byte_tensor])}")  # noqa: G004
     local_size = torch.LongTensor([byte_tensor.numel()]).to(device)
     return byte_tensor, local_size
 
 
 def _tensor_to_object(tensor, tensor_size):
+    if get_debug_level() == DebugLevel.DETAIL and is_nccl_available():
+        logger.warning(f"_tensor_to_object hash value: {torch._C._distributed_c10d._hash_tensors([tensor])}")  # noqa: G004
     tensor = tensor.cpu()
     buf = tensor.numpy().tobytes()[:tensor_size]
     return _unpickler(io.BytesIO(buf)).load()
