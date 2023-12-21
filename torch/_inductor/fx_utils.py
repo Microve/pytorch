@@ -87,7 +87,8 @@ class FakeTensorUpdater:
                 return all(
                     is_fake_tensor_same(new_i, old_i) for new_i, old_i in zip(new, old)
                 )
-            assert isinstance(new, torch.Tensor)
+            if not isinstance(new, torch.Tensor):
+                return new == old
             if new.shape != old.shape or new.layout != old.layout:
                 return False
             if new.layout == torch.strided and new.stride() != old.stride():
@@ -110,7 +111,7 @@ class FakeTensorUpdater:
             def is_aten_node(node):
                 return node.op == "call_function" and isinstance(
                     node.target, torch._ops.OpOverload
-                )
+                ) and node.target.namespace == "aten"
 
             if not is_aten_node(node):
                 continue
@@ -120,7 +121,7 @@ class FakeTensorUpdater:
                 updating_node = processing.pop()
                 if updating_node in processed:
                     continue
-                if is_aten_node(updating_node):
+                if not is_aten_node(updating_node):
                     continue
 
                 is_valid, args, kwargs = get_fake_args_kwargs(updating_node)
@@ -136,7 +137,7 @@ class FakeTensorUpdater:
 
                 # todo(chilli): This code path is not exercised by our existing
                 # tests - add a test
-                existing_storages[get_node_storage(new_fake_tensor)] += 1
+                existing_storages[get_node_storage(updating_node)] += 1
                 processed.add(updating_node)
                 for user in updating_node.users:
                     processing.append(user)
