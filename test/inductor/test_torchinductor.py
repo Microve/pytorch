@@ -539,6 +539,8 @@ def _run_and_assert_no_indirect_indexing(test_case, func, *args, **kwargs):
                 stmt = line.split(".store")[-1]
             elif "[" in line:
                 stmt = line.split("[")[-1].split("]")[0]
+            if "tl.make_block_ptr(" in line:
+                continue
 
             if stmt is None:
                 continue
@@ -8605,13 +8607,12 @@ if HAS_CUDA and RUN_CUDA and not TEST_WITH_ASAN:
                 torch.randn(N, N, N, device="cuda").permute(1, 2, 0),
             )
             code = run_and_get_triton_code(f, *inps)
-            self.assertTrue(
-                "tl.load(in_ptr0 + (x1 + (512*x0) + (262144*r2)), rmask, eviction_policy='evict_last'"
-                in code
-            )
-            self.assertTrue(
-                "tl.load(in_ptr1 + (x3 + (262144*r2)), rmask, eviction_policy='evict_first',"
-                in code
+            lines = [line for line in code.split("\n") if "tl.load" in line]
+            self.assertExpectedInline(
+                "\n".join(lines),
+                """\
+        tmp0 = tl.load(in_ptr0 + (x1 + (512*x0) + (262144*r2)), rmask, eviction_policy='evict_last', other=0.0)
+        tmp1 = tl.load(block_ptr0, boundary_check=[1], padding_option='zero', eviction_policy='evict_first')""",
             )
 
         # Disable index propagation, so the indirect indexing isn't optimized away
